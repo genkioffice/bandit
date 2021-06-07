@@ -1,5 +1,6 @@
 import matplotlib
 import matplotlib.pyplot as plt
+from collections import Counter
 import seaborn
 from arm import Arm
 import copy
@@ -99,26 +100,29 @@ class Thompson(BasicPolicy):
         self.ns = np.zeros(arm.get_K())
         self.ms = np.zeros(arm.get_K())
         self.ns_rolls = np.zeros(arm.get_K())
-        self.eval = NaiveEvaluator(arm)
+        self.eval = BatchEvaluator(arm)
 
     def pull(self, arm:Arm):
         self._set(arm)
-        for i in np.arange(params.N_SIZE):
-            e_means = []
-            for i_arm in np.arange(arm.get_K()):
+        for i in np.arange(0,params.N_SIZE, params.N_BATCH):
+            e_means = np.zeros((params.N_BATCH,arm.get_K()))
+            for t, i_arm in enumerate(np.arange(arm.get_K())):
                 n, m = self.ns[i_arm], self.ms[i_arm]
-                e_means.append(np.random.beta(self.alpha + n, self.beta + n -m, 1))
-            e_argmax = np.argmax(e_means)
-            x = arm.roll(e_argmax, 1)
-            # 事後分布更新
-            self.ns[e_argmax]+=1
-            self.ms[e_argmax]+=x
-            self.eval.set_evaluate(e_argmax)
+                e_means[:,i_arm] = np.random.beta(self.alpha + m, self.beta + n - m, params.N_BATCH)
+            e_argmaxs = np.array(list(map(lambda x: np.argmax(x), e_means)))
+            counts = Counter(e_argmaxs)
+            for i_arm, count in counts.items():
+                x = arm.roll(i_arm, count)
+                # 事後分布更新
+                self.ns[i_arm] += count
+                self.ms[i_arm] += x.sum()
+                self.eval.set_evaluate(count, i_arm)
+                self.ns_rolls[i_arm] += count
             self.regrets.append(self.eval.get_regret())
-            print(e_argmax, self.eval.get_regret())
-            self.ns_rolls[e_argmax] += 1
+            # print(e_argmax, self.eval.get_regret())
+            
         plt.figure()
-        plt.plot(np.arange(params.N_SIZE)+1, self.regrets)
+        plt.plot(np.arange(params.N_SIZE/ params.N_BATCH)+1, self.regrets)
         plt.savefig(f"image/thompson.png")
         print(self.ns_rolls)
 
