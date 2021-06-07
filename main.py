@@ -14,3 +14,9 @@ if __name__ == '__main__':
     e_greedy = policy.EpsilonGreedy(epsilon)
     e_cntl = Controller(e_greedy, X)
     e_cntl.simulate()
+
+    alpha, beta = 1, 1
+    thompson = policy.Thompson(alpha, beta)
+    t_cntl = Controller(thompson, X)
+    t_cntl.simulate()
+
