@@ -27,4 +27,11 @@ class BatchEvaluator(BasicEvaluator):
     def set_evaluate(self, n_data, e_argmax):
         self.regret += n_data * (self.mean_max - self.means[e_argmax])
         
-        
+class NaiveEvaluator(BasicEvaluator):
+    def __init__(self, arm:Arm):
+        self.n = 0
+        return super().__init__(arm)    
+
+
+    def set_evaluate(self, e_argmax):
+        self.regret += self.mean_max - self.means[e_argmax]
