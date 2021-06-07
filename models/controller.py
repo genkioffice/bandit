@@ -11,6 +11,7 @@ class Controller:
     def _set(self):
         self.arm = Arm(self.means)
 
-    def simulate(self):
-        self.policy.pull(self.arm)
+    def simulate(self, plot=True):
+        regrets, ns_rolls = self.policy.pull(self.arm, plot=plot)
+        return regrets, ns_rolls
 

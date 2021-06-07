@@ -31,7 +31,7 @@ class EpsilonGreedy(BasicPolicy):
         self.ns_rolls = np.zeros(arm.get_K())
 
 
-    def pull(self, arm:Arm):
+    def pull(self, arm:Arm, plot=True, silence=False):
         bools = np.random.binomial(1, self.epsilon, params.N_SIZE)
         self._set_eval(arm)
         # バッチ分だけ引く
@@ -48,13 +48,15 @@ class EpsilonGreedy(BasicPolicy):
             for i_arm, times in enumerate(diff_ns_rolls):
                 self.eval.set_evaluate(int(times), i_arm)
                 self.ns_rolls[i_arm] += int(times)
-            print(f"iter {i}, regret: {self.eval.get_regret()}, s_mean max:{self.e_means.max()}")
+            if silence:
+                print(f"iter {i}, regret: {self.eval.get_regret()}, s_mean max:{self.e_means.max()}")
             self.argmax = np.argmax(self.e_means)
             self.regrets.append(self.eval.get_regret())
             # print(self.ns_rolls_exp)
-        plt.plot(np.arange(params.N_SIZE/ params.N_BATCH)+1, self.regrets)
-        plt.savefig(f"image/epsilon_greedy.png")
-        print(self.ns_rolls)
+        if plot:
+            plt.plot(np.arange(params.N_SIZE/ params.N_BATCH)+1, self.regrets)
+            plt.savefig(f"image/epsilon_greedy.png")
+        return self.regrets, self.ns_rolls
 
     def calc_means(self, n_data, arm:Arm):
         # initialize
@@ -102,7 +104,7 @@ class Thompson(BasicPolicy):
         self.ns_rolls = np.zeros(arm.get_K())
         self.eval = BatchEvaluator(arm)
 
-    def pull(self, arm:Arm):
+    def pull(self, arm:Arm, plot=True):
         self._set(arm)
         for i in np.arange(0,params.N_SIZE, params.N_BATCH):
             e_means = np.zeros((params.N_BATCH,arm.get_K()))
@@ -121,10 +123,12 @@ class Thompson(BasicPolicy):
             self.regrets.append(self.eval.get_regret())
             # print(e_argmax, self.eval.get_regret())
             
-        plt.figure()
-        plt.plot(np.arange(params.N_SIZE/ params.N_BATCH)+1, self.regrets)
-        plt.savefig(f"image/thompson.png")
-        print(self.ns_rolls)
+        if plot:
+            plt.figure()
+            plt.plot(np.arange(params.N_SIZE/ params.N_BATCH)+1, self.regrets)
+            plt.savefig(f"image/thompson.png")
+        return self.regrets, self.ns_rolls
+
 
         
 
