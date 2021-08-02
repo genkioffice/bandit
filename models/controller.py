@@ -14,3 +14,10 @@ class Controller:
     def simulate(self):
         self.policy.pull(self.arm)
 
+class LinearController:
+    def __init__(self, policy:BasicPolicy, arm:Arm):
+        self.policy = policy
+        self.arm = arm
+
+    def simulate(self):
+        self.policy.pull(self.arm)

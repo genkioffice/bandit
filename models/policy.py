@@ -7,7 +7,7 @@ import copy
 from params import N_BATCH
 import numpy as np
 import params
-from eval import BatchEvaluator, NaiveEvaluator
+from eval import BatchEvaluator, NaiveEvaluator, BatchLinearEvaluator
 plt.rcParams["figure.figsize"] = (8,5)
 seaborn.set()
 
@@ -32,19 +32,23 @@ class EpsilonGreedy(BasicPolicy):
 
 
     def pull(self, arm:Arm):
+        # 1の出る確率がepsilon
         bools = np.random.binomial(1, self.epsilon, params.N_SIZE)
         self._set_eval(arm)
-        # バッチ分だけ引く
+        # バッチ分更新する
         for i in np.arange(0,params.N_SIZE, params.N_BATCH):
             locbs = bools[i:i+params.N_BATCH]
             data = arm.roll(self.argmax, params.N_BATCH)
-            # pol_data = data[locbs==1]
+            # locbsが0のとき、argmaxの物を引く。1のとき、探索が実行される。
             ass_data = data[locbs==0]
             prev_ns_rolls = copy.deepcopy(self.ns_rolls_exp)
+            # 探索part: パラメータの更新
             self.calc_means(len(data[locbs==1]), arm)
             self.eval.set_evaluate(len(ass_data), self.argmax)
+            # 活用part: パラメータを更新せず、最適な腕を引く
             self.ns_rolls[self.argmax] += len(ass_data)
             diff_ns_rolls = self.ns_rolls_exp - prev_ns_rolls
+            # regret更新
             for i_arm, times in enumerate(diff_ns_rolls):
                 self.eval.set_evaluate(int(times), i_arm)
                 self.ns_rolls[i_arm] += int(times)
@@ -56,6 +60,7 @@ class EpsilonGreedy(BasicPolicy):
         plt.savefig(f"image/epsilon_greedy.png")
         print(self.ns_rolls)
 
+    # 標本平均の計算
     def calc_means(self, n_data, arm:Arm):
         # initialize
         if (type(self.e_means) == int) & (type(self.ns_rolls_exp) == int):
@@ -66,27 +71,107 @@ class EpsilonGreedy(BasicPolicy):
             return
         ts = n_data//K
         if ts != 0:
+            # 各armでts回引く
             for i_arm in np.arange(K):
                 e_n = self.ns_rolls_exp[i_arm]
                 data = arm.roll(i_arm, ts)
                 # 平均更新
-                # print(self.e_means[i_arm])
-                # print((-1*float(ts/(ts+e_n))) * self.e_means[i_arm])
                 self.e_means[i_arm] += (-1*float(ts/(ts+e_n))) * self.e_means[i_arm]\
                                         + float(1/(ts+e_n)) * np.sum(data)
             self.ns_rolls_exp += ts
+        # K回以下の残りについて標本平均を更新する
         ts = n_data % K
         i_argmin = np.argmin(self.ns_rolls_exp)
         for i_arm in np.arange(i_argmin, ts):
             if i_arm >= K:
-                i_arm -=K
-            # print(self.ns_rolls_exp)
-            # print(i_arm)
+                i_arm %=K
             e_n = self.ns_rolls_exp[i_arm]
             data = arm.roll(i_arm, 1)
             self.e_means[i_arm] += (-1*float(1/(1+e_n))) * self.e_means[i_arm]\
                                         + float(1/(1+e_n)) * np.sum(data)
             self.ns_rolls_exp[i_arm] += 1
+
+
+class LinearEpsilonGreedy(BasicPolicy):
+    def __init__(self, epsilon):
+        self.epsilon = epsilon
+        self.e_theta = 0
+        # thetaの推定のための推定量
+        self.A, self.b = 0, 0
+        self.ns_rolls = []
+        self.last_pulled = 0
+        self.argmax = 0
+        self.ns_rolls_exp = 0
+        self.regrets = []
+
+
+    def _set_eval(self, arm):
+        self.eval = BatchLinearEvaluator(arm)
+        self.ns_rolls = np.zeros(arm.get_K())
+
+
+    def pull(self, arm:Arm):
+        # 1の出る確率がepsilon
+        bools = np.random.binomial(1, self.epsilon, params.N_SIZE)
+        self._set_eval(arm)
+        # バッチ分だけ更新する
+        for i in np.arange(0,params.N_SIZE, params.N_BATCH):
+            locbs = bools[i:i+params.N_BATCH]
+            e_regrets = arm.roll(self.argmax, params.N_BATCH)
+            # locbsが0のとき、argmaxの物を引く。1のとき、探索が実行される。
+            # 準備
+            prev_ns_rolls = copy.deepcopy(self.ns_rolls_exp)
+            # 探索part
+            self.estimate(len(locbs[locbs==1]), arm)
+            # 活用part: ns_rollsのargmax部を伸ばしておくだけで、下のfor文で値を更新する
+            ass_data = e_regrets[locbs==0]
+            self.ns_rolls[self.argmax] += len(ass_data)
+            # 活用partではパラメタ更新しない
+            diff_ns_rolls = self.ns_rolls_exp - prev_ns_rolls
+            # regret更新
+            for i_arm, times in enumerate(diff_ns_rolls):
+                self.eval.set_evaluate(int(times), i_arm)
+                self.ns_rolls[i_arm] += int(times)
+            print(f"iter {i}, regret: {self.eval.get_regret()}, theta_hat:{self.theta_hat}")
+            self.argmax = np.argmax(self.e_rewards)
+            self.regrets.append(self.eval.get_regret())
+
+        plt.plot(np.arange(params.N_SIZE/ params.N_BATCH)+1, self.regrets)
+        plt.savefig(f"image/linear_epsilon_greedy.png")
+        print(self.ns_rolls)
+
+    # thetaを推定し、regret更新のための情報を保存する
+    def estimate(self, n_data, arm:Arm):
+        # initialize
+        if (type(self.e_theta) == int) & (type(self.ns_rolls_exp) == int):
+            self.e_theta = np.zeros(arm.get_K())
+            # このベクトルは各アームが何回実行されたかを保存する
+            self.ns_rolls_exp = np.zeros(arm.get_K())
+        K = arm.get_K()
+        if n_data == 0:
+            return
+        ts = n_data//K
+        if ts != 0:
+            # 各armでts回引く
+            for i_arm in np.arange(K):
+                self.A += np.dot(arm.params[i_arm].reshape((len(arm.params[i_arm]), 1)), arm.params[i_arm].reshape(1, len(arm.params[i_arm]))) * ts
+                self.b += np.sum(arm.roll(i_arm, ts)) * arm.params[i_arm]            
+            self.ns_rolls_exp += ts
+        # K回以下の残りについて標本平均を更新する
+        ts = n_data % K
+        for i_arm in np.arange(self.last_pulled, ts + self.last_pulled):
+            if i_arm >= K:
+                i_arm %= K
+            rw = arm.roll(i_arm, 1)
+            self.A += np.dot(arm.params[i_arm].reshape((len(arm.params[i_arm]), 1)), arm.params[i_arm].reshape(1, len(arm.params[i_arm])))
+            self.b += rw * arm.params[i_arm]
+            self.ns_rolls_exp[i_arm] += 1
+            self.last_pulled = i_arm + 1
+
+        self.theta_hat = np.dot(np.linalg.inv(self.A), self.b.reshape((len(self.b), 1)))
+        self.e_rewards = [np.dot(self.theta_hat.T, v.reshape((len(v),1))) for v in arm.params]
+        self.argmax = np.argmax(self.e_rewards)
+
 
 class Thompson(BasicPolicy):
     def __init__(self, alpha, beta):
