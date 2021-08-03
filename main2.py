@@ -30,3 +30,7 @@ if __name__ == '__main__':
     thompson = policy.LinearThompson(tau, xi)
     t_cntl = LinearController(thompson, g_arm)
     t_cntl.simulate()
+
+    lin_ucb = policy.LinearUCB()
+    u_cntl = LinearController(lin_ucb, g_arm)
+    u_cntl.simulate()

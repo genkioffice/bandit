@@ -260,10 +260,69 @@ class LinearThompson(BasicPolicy):
 
 
 
+class LinearUCB(BasicPolicy):
+    def __init__(self):
+        self.theta = 0
+        self.A = np.array([[1e-5,0],[0,1e-5]])
+        self.b = 0
+        self.alpha = np.sqrt(2 * np.log(20)) # 有意水準0.05
+        self.regrets = []
 
 
+    def _set(self, arm:Arm):
+        self.sigmas = arm.get_sigmas()
+        self.K = arm.get_K()
+        self.ns_rolls = np.zeros(self.K)
+        self.ucb = np.zeros(self.K)
+        self.eval = BatchLinearEvaluator(arm)
+        
+    
+    def pull(self, arm:Arm):
+        self._set(arm)
+        for i_arm in np.arange(arm.get_K()):
+            reward = arm.roll(i_arm, 1)
+            self.estimate(reward, i_arm, arm)
+            self.ucb[i_arm] = self.calc_ucb(i_arm, arm)
+            self.ns_rolls[i_arm] = 1
+            self.eval.set_evaluate(1, i_arm)
+        i_argmax = np.argmax(self.ucb)
+        for t in np.arange(params.N_BATCH):
+            # step初回は1回分引いたことにする
+            if t == 0:
+                rewards = arm.roll(i_argmax, params.N_STEP - 1)
+                self.eval.set_evaluate(params.N_STEP - 1, i_argmax)
+            else:
+                rewards = arm.roll(i_argmax, params.N_STEP)
+                self.eval.set_evaluate(params.N_STEP, i_argmax)
+            self.estimate(rewards, i_argmax, arm)
+            self.ns_rolls[i_argmax] += params.N_STEP
+            for i_arm in np.arange(self.K):
+                self.ucb[i_arm] = self.calc_ucb(i_arm, arm)
+            i_argmax = np.argmax(self.ucb)
+            self.regrets.append(self.eval.get_regret())
+            # print(f"ucb: {self.ucb}")
+
+        plt.plot(np.arange(params.N_STEP)+1, self.regrets)
+        plt.savefig(f"image/linear_ucb_greedy.png")
+        np.set_printoptions(suppress=True)
+        print(self.ns_rolls)
 
 
+    # thetaの推定(future: 逆行列の計算の効率化)
+    def estimate(self, rewards, i_arm, arm:Arm):
+        n = len(rewards)
+        self.A += np.dot(arm.params[i_arm].reshape((len(arm.params[i_arm]), 1)), arm.params[i_arm].reshape(1, len(arm.params[i_arm]))) * n
+        self.b += np.sum(rewards) * arm.params[i_arm]
+        self.A_inv = np.linalg.inv(self.A)
+        self.theta = np.dot(self.A_inv, self.b.reshape((len(self.b), 1)))
 
+    # ucbの計算
+    def calc_ucb(self, i_arm, arm):
+        d = len(self.theta)
+        # print(np.dot(arm.params[i_arm].resize((1,d)),self.A_inv))
+        a = arm.params[i_arm].reshape((1,d))
+        a_inv = arm.params[i_arm].reshape((d,1))
+        tmp = np.dot(a, self.A_inv)
+        d = np.dot(tmp,a_inv)
 
-
+        return np.dot(a, self.theta) + self.sigmas[i_arm] * self.alpha * np.sqrt(d)
