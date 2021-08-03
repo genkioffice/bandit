@@ -25,8 +25,8 @@ if __name__ == '__main__':
     e_cntl = LinearController(e_greedy, g_arm)
     e_cntl.simulate()
 
-    # alpha, beta = 1, 1
-    # thompson = policy.Thompson(alpha, beta)
-    # t_cntl = Controller(thompson, g_arm)
-    # t_cntl.simulate()
-
+    # 事前分布事後分布ともにgauss
+    tau, xi = 1, 1
+    thompson = policy.LinearThompson(tau, xi)
+    t_cntl = LinearController(thompson, g_arm)
+    t_cntl.simulate()

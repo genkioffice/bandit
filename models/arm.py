@@ -60,3 +60,6 @@ class GaussArm(LinearArm):
 
     def get_ub_rewards(self):
         return self.ub_rewards
+    
+    def get_sigmas(self):
+        return self.sigmas

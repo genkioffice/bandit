@@ -212,6 +212,51 @@ class Thompson(BasicPolicy):
         print(self.ns_rolls)
 
         
+class LinearThompson(BasicPolicy):
+    def __init__(self, tau, xi):
+        self.tau = tau
+        self.xi = xi
+        self.regrets = []
+        self.ns_rolls = []
+        pass
+
+    def _set(self, arm:Arm):
+        self.ns = np.zeros(arm.get_K())
+        self.s_means = np.zeros(arm.get_K())
+        self.ns_rolls = np.zeros(arm.get_K())
+        self.sigmas = arm.get_sigmas()
+        self.eval = BatchLinearEvaluator(arm)
+
+    def pull(self, arm:Arm):
+        self._set(arm)
+        for i in np.arange(0,params.N_SIZE, params.N_BATCH):
+            x_means = np.zeros((params.N_BATCH,arm.get_K()))
+            # 事後分布からサンプリング(初回は事前分布からサンプリングする)
+            for t, i_arm in enumerate(np.arange(arm.get_K())):
+                n = self.ns[i_arm]
+                sigma = self.sigmas[i_arm]
+                s_mean = self.s_means[i_arm]
+                x_mean_hat = (float(n/sigma)/(float(n/sigma) + (1/self.tau)))* s_mean + (float(1/self.tau)/(float(n/sigma) + (1/self.tau))) * self.xi
+                x_sigma = np.sqrt(1/(float(n/sigma) + (1/self.tau)))
+                x_means[:,i_arm] = np.random.normal(loc=x_mean_hat, scale=x_sigma, size=params.N_BATCH)
+            e_argmaxs = np.array(list(map(lambda x: np.argmax(x), x_means)))
+            counts = Counter(e_argmaxs)
+            for i_arm, count in counts.items():
+                x = arm.roll(i_arm, count)
+                # 事後分布更新(事後分布で与えられるパラメタの更新)
+                prev_n = self.ns[i_arm]
+                self.ns[i_arm] += count
+                self.s_means[i_arm] = float(prev_n/(self.ns[i_arm]))  * self.s_means[i_arm] + float(1/self.ns[i_arm]) * x.sum()
+                self.eval.set_evaluate(count, i_arm)
+                self.ns_rolls[i_arm] += count
+            self.regrets.append(self.eval.get_regret())
+            print(f"iter {i}, regret: {self.eval.get_regret()}, means:{self.s_means}")
+            
+        plt.figure()
+        plt.plot(np.arange(params.N_SIZE/ params.N_BATCH)+1, self.regrets)
+        plt.savefig(f"image/linear_thompson.png")
+        np.set_printoptions(suppress=True)
+        print(self.ns_rolls)
 
 
 
