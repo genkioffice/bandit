@@ -19,5 +19,5 @@ class LinearController:
         self.policy = policy
         self.arm = arm
 
-    def simulate(self):
-        self.policy.pull(self.arm)
+    def simulate(self, plot=True):
+        return self.policy.pull(self.arm, plot=plot)

@@ -102,7 +102,7 @@ class LinearEpsilonGreedy(BasicPolicy):
         self.last_pulled = 0
         self.argmax = 0
         self.ns_rolls_exp = 0
-        self.regrets = []
+        self.regrets = [0]
 
 
     def _set_eval(self, arm):
@@ -110,7 +110,7 @@ class LinearEpsilonGreedy(BasicPolicy):
         self.ns_rolls = np.zeros(arm.get_K())
 
 
-    def pull(self, arm:Arm):
+    def pull(self, arm:Arm, plot=True):
         # 1の出る確率がepsilon
         bools = np.random.binomial(1, self.epsilon, params.N_SIZE)
         self._set_eval(arm)
@@ -136,9 +136,11 @@ class LinearEpsilonGreedy(BasicPolicy):
             self.argmax = np.argmax(self.e_rewards)
             self.regrets.append(self.eval.get_regret())
 
-        plt.plot(np.arange(params.N_SIZE/ params.N_BATCH)+1, self.regrets)
-        plt.savefig(f"image/linear_epsilon_greedy.png")
+        if plot:
+            plt.plot(np.arange(params.N_SIZE/ params.N_BATCH)+1, self.regrets)
+            plt.savefig(f"image/linear_epsilon_greedy.png")
         print(self.ns_rolls)
+        return self.regrets
 
     # thetaを推定し、regret更新のための情報を保存する
     def estimate(self, n_data, arm:Arm):
@@ -216,7 +218,7 @@ class LinearThompson(BasicPolicy):
     def __init__(self, tau, xi):
         self.tau = tau
         self.xi = xi
-        self.regrets = []
+        self.regrets = [0]
         self.ns_rolls = []
         pass
 
@@ -227,7 +229,7 @@ class LinearThompson(BasicPolicy):
         self.sigmas = arm.get_sigmas()
         self.eval = BatchLinearEvaluator(arm)
 
-    def pull(self, arm:Arm):
+    def pull(self, arm:Arm, plot=True):
         self._set(arm)
         for i in np.arange(0,params.N_SIZE, params.N_BATCH):
             x_means = np.zeros((params.N_BATCH,arm.get_K()))
@@ -251,13 +253,14 @@ class LinearThompson(BasicPolicy):
                 self.ns_rolls[i_arm] += count
             self.regrets.append(self.eval.get_regret())
             print(f"iter {i}, regret: {self.eval.get_regret()}, means:{self.s_means}")
-            
-        plt.figure()
-        plt.plot(np.arange(params.N_SIZE/ params.N_BATCH)+1, self.regrets)
-        plt.savefig(f"image/linear_thompson.png")
+        
+        if plot:
+            plt.figure()
+            plt.plot(np.arange(params.N_SIZE/ params.N_BATCH)+1, self.regrets)
+            plt.savefig(f"image/linear_thompson.png")
         np.set_printoptions(suppress=True)
         print(self.ns_rolls)
-
+        return self.regrets
 
 
 class LinearUCB(BasicPolicy):
@@ -266,7 +269,7 @@ class LinearUCB(BasicPolicy):
         self.A = np.array([[1e-5,0],[0,1e-5]])
         self.b = 0
         self.alpha = np.sqrt(2 * np.log(20)) # 有意水準0.05
-        self.regrets = []
+        self.regrets = [0]
 
 
     def _set(self, arm:Arm):
@@ -277,7 +280,7 @@ class LinearUCB(BasicPolicy):
         self.eval = BatchLinearEvaluator(arm)
         
     
-    def pull(self, arm:Arm):
+    def pull(self, arm:Arm, plot=True):
         self._set(arm)
         for i_arm in np.arange(arm.get_K()):
             reward = arm.roll(i_arm, 1)
@@ -302,11 +305,12 @@ class LinearUCB(BasicPolicy):
             self.regrets.append(self.eval.get_regret())
             # print(f"ucb: {self.ucb}")
 
-        plt.plot(np.arange(params.N_STEP)+1, self.regrets)
-        plt.savefig(f"image/linear_ucb_greedy.png")
+        if plot:
+            plt.plot(np.arange(params.N_STEP)+1, self.regrets)
+            plt.savefig(f"image/linear_ucb_greedy.png")
         np.set_printoptions(suppress=True)
         print(self.ns_rolls)
-
+        return self.regrets
 
     # thetaの推定(future: 逆行列の計算の効率化)
     def estimate(self, rewards, i_arm, arm:Arm):
